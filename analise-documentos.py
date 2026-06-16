@@ -38,6 +38,11 @@ def extrair_dados_pdf(caminho_pdf):
         match_id_arq_10 = re.search(r'(?<!\d)(\d{10})(?!\d)', nome_arquivo)
         if match_id_arq_10:
             dados["ID Solicitação"] = match_id_arq_10.group(1)
+        else:
+            # Fallback para busca no texto: "Número da Solicitação: 8000066095"
+            match_id_txt = re.search(r'Número\s+da\s+Solicitação\s*:\s*(\d+)', texto_completo, re.IGNORECASE)
+            if match_id_txt:
+                dados["ID Solicitação"] = match_id_txt.group(1)
 
     # 2. Total Horas (ex: "Total de Horas – 98h")
     match_total_horas = re.search(r'Total\s+de\s+Horas\s*[-–—:]\s*([\d,]+\s*h(?:oras)?)', texto_completo, re.IGNORECASE)
@@ -91,9 +96,10 @@ def extrair_dados_pdf(caminho_pdf):
             if re.search(r'^(?:Critérios|Importante|\d+\.|---|História|Premissas|Faturamento|Aprovação)', line_strip, re.IGNORECASE):
                 break
                 
-            # Verifica se tem padrão de Perfil: Horas (ex: "Desenvolvedor ABAP: 52h" ou "Funcional SD 46h")
+            # Verifica se tem padrão de Perfil: Horas (ex: "Desenvolvedor ABAP: 52h" ou "Funcional (ACM) – 56 horas")
+            # Inclui suporte a traços longos (en dash \u2013, em dash \u2014) como separadores
             profile_match = re.search(
-                r'^([a-zA-Záéíóúâêîôûãõç\s\-/(),.]+)[:\-\s]+(\d+\s*h(?:oras)?)',
+                r'^([a-zA-Záéíóúâêîôûãõç\s\-/(),.]+)[:\-–—\s\u2013\u2014]+(\d+\s*h(?:oras)?)',
                 line_strip,
                 re.IGNORECASE
             )
