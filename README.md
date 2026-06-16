@@ -66,5 +66,22 @@ uv run python main.py
 
 ---
 
-> [!TIP]
-> **Processamento em Lote:** O script atual lê a planilha `incidentes.xlsx` utilizando `pandas` no início do código, mas realiza a busca de um ID estático para testes. Para processar todos os IDs da planilha, implemente um laço de repetição (`for index, row in ids.iterrows():`) sobre o fluxo de busca.
+## 📊 Análise de Relatórios (`analise-documentos.py`)
+
+Além de baixar os documentos, o projeto conta com um analisador de PDFs automático que extrai informações cruciais de dentro de todos os relatórios presentes na pasta `relatorios/`.
+
+### Como usar:
+Execute o script de análise com o `uv run`:
+```bash
+uv run python analise-documentos.py
+```
+
+### O que ele extrai:
+*   **Total de Horas**: Horas totais estimadas para o incidente.
+*   **Conversão Baseline Horas**: Horas a serem descontadas do baseline de horas.
+*   **Conversão Baseline Tickets**: Quantidade de tickets baseline a descontar.
+*   **Valor**: Valor monetário (Investimento em R$), se houver.
+*   **Horas por Grupo (Perfil)**: A quebra de horas para cada perfil envolvido (ex: ABAP, Funcional SD).
+
+### Resultados:
+O script exibe um resumo no terminal e salva uma planilha consolidadora com os dados extraídos de todos os PDFs em **`relatorios/analise_relatorios.xlsx`**.
