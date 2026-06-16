@@ -55,6 +55,13 @@ def extrair_dados_pdf(caminho_pdf):
         texto_completo,
         re.IGNORECASE
     )
+    if not match_conv_horas:
+        # Fallback para o novo formato em tabela (ex: "☐ Conversão de Horas Baseline 29.72hr")
+        match_conv_horas = re.search(
+            r'Conversão\s+de\s+Horas\s+Baseline\s+([\d,\.]+\s*(?:h|horas|hr|hrs)?)',
+            texto_completo,
+            re.IGNORECASE
+        )
     if match_conv_horas:
         dados["Conv Baseline Horas"] = match_conv_horas.group(1).strip()
 
@@ -69,6 +76,13 @@ def extrair_dados_pdf(caminho_pdf):
 
     # 5. Valor / Investimento (ex: "Investimento (em R$): R$ 10.000,00" ou "Investimento (em R$): R$ ")
     match_valor = re.search(r'Investimento\s*\(em\s*R\$\)\s*:\s*(.*)', texto_completo, re.IGNORECASE)
+    if not match_valor:
+        # Fallback para o novo formato em tabela (ex: "☐ Investimento extracontrato (em R$) R$ 6.641,43" ou "☐ Investimento (em R$) R$ 9.999,99")
+        match_valor = re.search(
+            r'Investimento\s*(?:extracontrato\s*)?\(em\s*R\$\)\s*(.*)',
+            texto_completo,
+            re.IGNORECASE
+        )
     if match_valor:
         val_extracted = match_valor.group(1).strip()
         # Se contiver números (mesmo com pontuação), extraímos o valor limpo, caso contrário tratamos como None
