@@ -27,16 +27,17 @@ def extrair_dados_pdf(caminho_pdf):
     }
 
     # 1. ID da Solicitação
-    # Tenta extrair do nome do arquivo (ex: "8000066095_...")
     nome_arquivo = os.path.basename(caminho_pdf)
-    match_id_arq = re.match(r'^(\d+)', nome_arquivo)
+    # Tenta achar um número de 10 dígitos que comece com 8 no nome do arquivo (padrão SAP SolMan: 8xxxxxxxxx)
+    # Usamos lookaround (?<!\d) e (?!\d) ao invés de \b para suportar limites como underscores (_) sem casar com datas
+    match_id_arq = re.search(r'(?<!\d)(8\d{9})(?!\d)', nome_arquivo)
     if match_id_arq:
         dados["ID Solicitação"] = match_id_arq.group(1)
     else:
-        # Fallback para busca no texto: "Número da Solicitação: 8000066095"
-        match_id_txt = re.search(r'Número\s+da\s+Solicitação\s*:\s*(\d+)', texto_completo, re.IGNORECASE)
-        if match_id_txt:
-            dados["ID Solicitação"] = match_id_txt.group(1)
+        # Se não achou, tenta qualquer número de 10 dígitos no nome do arquivo
+        match_id_arq_10 = re.search(r'(?<!\d)(\d{10})(?!\d)', nome_arquivo)
+        if match_id_arq_10:
+            dados["ID Solicitação"] = match_id_arq_10.group(1)
 
     # 2. Total Horas (ex: "Total de Horas – 98h")
     match_total_horas = re.search(r'Total\s+de\s+Horas\s*[-–—:]\s*([\d,]+\s*h(?:oras)?)', texto_completo, re.IGNORECASE)
