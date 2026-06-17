@@ -36,7 +36,7 @@ def is_valid_profile_name(name):
     ]
     # Palavras-chave curtas que devem ser palavras completas
     word_keywords = [
-        'SD', 'MM', 'FI', 'CO', 'PP', 'WM', 'WEB', 'COE'
+        'SD', 'MM', 'FI', 'CO', 'PP', 'WM', 'WEB', 'COE', 'ACM'
     ]
     
     if any(kw in name_upper for kw in substring_keywords):
@@ -415,12 +415,17 @@ def extrair_dados_pdf(caminho_pdf):
 
     # 4. Conversão Tickets Baseline (ex: "Conversão de tickets baseline: 5 tickets" ou "Conversão baseline tickets: 5 tks")
     match_conv_tickets = re.search(
-        r'Conversão\s+(?:de\s+)?(?:tickets\s+baseline|baseline\s+tickets)\s*:\s*([\d,\.]+\s*(?:tickets|ticket|tks)?)',
+        r'Conversão\s+(?:de\s+)?(?:tickets\s+baseline|baseline\s+tickets)\s*[-–—:]?\s*([\d,\.]+(?:\s*(?:tickets|ticket|tks))?)',
         texto_completo,
         re.IGNORECASE
     )
     if match_conv_tickets:
-        dados["Conv Baseline Tickets"] = match_conv_tickets.group(1).strip()
+        val_tk = match_conv_tickets.group(1).strip()
+        val_tk_num = re.search(r'([\d\.,]+)', val_tk)
+        if val_tk_num:
+            dados["Conv Baseline Tickets"] = f"{val_tk_num.group(1)} tickets"
+        else:
+            dados["Conv Baseline Tickets"] = val_tk
 
     # 5. Valor / Investimento (ex: "Investimento (em R$): R$ 10.000,00" ou "Investimento (em R$): R$ ")
     match_valor = re.search(r'Investimento\s*\(em\s*R\$\)\s*:\s*(.*)', texto_completo, re.IGNORECASE)
