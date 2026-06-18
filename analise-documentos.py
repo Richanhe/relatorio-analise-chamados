@@ -1,10 +1,15 @@
 import os
 import re
 import shutil
+import sys
 import pandas as pd
 import pytesseract
 from PIL import Image
 from pypdf import PdfReader
+
+# Reconfigura stdout para evitar erros de encoding ao rodar no Windows
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
 
 pytesseract.pytesseract.tesseract_cmd = r"C:\Users\richard.kanheski\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
 
@@ -50,17 +55,24 @@ def normalize_profile_name(name):
     # Tratamento de variações e erros comuns de OCR
     if any(x in name_norm for x in ['COE GA', 'COCUMORENAEUNN', 'FUNCIONAL', 'CONSULTOR FUNCIONAL', 'O FUNCIONAL']):
         # Mapeamento especial para os centros de custo e de processos
-        if 'FI' in name_norm:
+        words = re.findall(r'\b[A-Z0-9]+\b', name_norm)
+        if 'FI' in words:
             return "Funcional FI"
-        if 'SD' in name_norm:
+        if 'CO' in words:
+            return "Funcional CO"
+        if 'SD' in words:
             return "Funcional SD"
-        if 'MM' in name_norm:
+        if 'MM' in words:
             return "Funcional MM"
-        if 'ACM' in name_norm:
+        if 'PP' in words:
+            return "Funcional PP"
+        if 'WM' in words:
+            return "Funcional WM"
+        if 'ACM' in words:
             return "Funcional ACM"
-        if 'APPGR' in name_norm or 'GR' in name_norm:
+        if 'APPGR' in words or 'GR' in words:
             return "Funcional AppGraos"
-        if 'FOMENTO' in name_norm:
+        if 'FOMENTO' in words:
             return "Funcional Fomento"
         return "Consultor Funcional"
         
@@ -141,16 +153,35 @@ def parse_ocr_profiles(ocr_text):
             start_idx, end_idx = num_match.span()
             profile_part = line[:start_idx].strip()
         else:
-            # Fallback: verifica se a próxima linha é um número puro
+            # Fallback: verifica se alguma das próximas linhas (até encontrar outro perfil) é um número puro
             profile_part = line.split('|')[0].strip()
             hours_str = None
-            if i + 1 < len(lines):
-                next_line = lines[i+1]
+            
+            # Procura nas próximas 4 linhas (útil para quando a descrição quebra em várias linhas no OCR PSM 11)
+            for offset in range(1, 5):
+                if i + offset >= len(lines):
+                    break
+                next_line = lines[i + offset]
+                
+                # Se encontrarmos outro perfil válido nas próximas linhas (sem número na mesma linha), interrompe a busca
+                next_line_clean_name = re.sub(r'^[:\s\-\|•\*\+o\u2022\u2610\u2611]+', '', next_line.split('|')[0].strip())
+                next_line_clean_name = re.sub(r'\b[fF][1lL|]\b', 'FI', next_line_clean_name)
+                next_line_clean_name = re.sub(r'\b[cC]0\b', 'CO', next_line_clean_name)
+                next_line_lower = next_line_clean_name.lower()
+                
+                has_bl = any(x in next_line_lower for x in blacklist)
+                is_too_short = len(re.sub(r'[^a-zA-Z]', '', next_line_clean_name)) < 2
+                
+                if next_line_clean_name and not has_bl and not is_too_short and is_valid_profile_name(next_line_clean_name):
+                    if not re.search(r'\b(\d+[\.,]\d+|\d+)\b', next_line):
+                        break
+                
                 next_line_part = next_line.split('|')[0].strip()
                 next_line_clean = re.sub(r'(?i)\s*(?:h|horas|hr|hrs)?\s*$', '', next_line_part).strip()
                 if re.match(r'^[\d\.,]+$', next_line_clean):
                     hours_str = next_line_clean
-                    i += 1 # Consome a próxima linha
+                    i += offset
+                    break
             
         if not hours_str:
             i += 1
@@ -158,6 +189,11 @@ def parse_ocr_profiles(ocr_text):
             
         # Limpar ruídos comuns do início do nome do perfil (ex: marcadores, tabelas)
         profile_part_clean = re.sub(r'^[:\s\-\|•\*\+o\u2022\u2610\u2611]+', '', profile_part).strip()
+        
+        # Corrige erros de OCR comuns para os nomes dos perfis
+        profile_part_clean = re.sub(r'\b[fF][1lL|]\b', 'FI', profile_part_clean)
+        profile_part_clean = re.sub(r'\b[cC]0\b', 'CO', profile_part_clean)
+        
         profile_part_lower = profile_part_clean.lower()
         
         has_bl = any(x in profile_part_lower for x in blacklist)
@@ -212,10 +248,17 @@ def extrair_dados_ocr(caminho_pdf, page_index):
         if not images_data:
             return None, None
             
-        # Vamos gerar os textos completos para cada uma das 3 passagens de OCR
+        # Vamos gerar os textos completos para cada uma das passagens de OCR (incluindo múltiplos thresholds de binarização)
         text_orig_list = []
         text_gray_list = []
-        text_bin_list = []
+        text_gray_psm11_list = []
+        
+        # Estrutura para armazenar as listas das passagens binarizadas por threshold (resiliência a ruídos/JPEG)
+        bin_passes = {
+            127: {"default": [], "psm11": []},
+            100: {"default": [], "psm11": []},
+            150: {"default": [], "psm11": []}
+        }
         
         for img_path, img_name in images_data:
             try:
@@ -225,18 +268,31 @@ def extrair_dados_ocr(caminho_pdf, page_index):
                 text_orig = pytesseract.image_to_string(img, lang="por+eng")
                 text_orig_list.append(text_orig)
                 
-                # 2. Redimensiona 2x e escala cinza
+                # 2. Redimensiona 2x e escala cinza (faz uma única vez por imagem)
                 width, height = img.size
                 img_resized = img.resize((width * 2, height * 2), Image.Resampling.LANCZOS)
                 img_gray = img_resized.convert('L')
+                
+                # OCR Grayscale (PSM 3)
                 text_gray = pytesseract.image_to_string(img_gray, lang="por+eng")
                 text_gray_list.append(text_gray)
                 
-                # 3. Binarização
-                threshold = 127
-                img_bin = img_gray.point(lambda p: 255 if p > threshold else 0)
-                text_bin = pytesseract.image_to_string(img_bin, lang="por+eng")
-                text_bin_list.append(text_bin)
+                # OCR Grayscale (PSM 11)
+                text_gray_psm11 = pytesseract.image_to_string(img_gray, lang="por+eng", config="--psm 11")
+                text_gray_psm11_list.append(text_gray_psm11)
+                
+                # 3. Binarizações com diferentes limites
+                for thresh in bin_passes.keys():
+                    img_bin = img_gray.point(lambda p: 255 if p > thresh else 0)
+                    
+                    # Binarized (PSM 3)
+                    text_bin = pytesseract.image_to_string(img_bin, lang="por+eng")
+                    bin_passes[thresh]["default"].append(text_bin)
+                    
+                    # Binarized (PSM 11)
+                    text_bin_psm11 = pytesseract.image_to_string(img_bin, lang="por+eng", config="--psm 11")
+                    bin_passes[thresh]["psm11"].append(text_bin_psm11)
+                    
             except Exception as e:
                 print(f"Erro ao processar imagem {img_name}: {e}")
                 
@@ -244,8 +300,12 @@ def extrair_dados_ocr(caminho_pdf, page_index):
         passes = [
             ("original", "\n".join(text_orig_list)),
             ("gray", "\n".join(text_gray_list)),
-            ("binarized", "\n".join(text_bin_list))
+            ("gray_psm11", "\n".join(text_gray_psm11_list))
         ]
+        
+        for thresh, t_dicts in bin_passes.items():
+            passes.append((f"binarized_{thresh}", "\n".join(t_dicts["default"])))
+            passes.append((f"binarized_{thresh}_psm11", "\n".join(t_dicts["psm11"])))
         
         pass_results = []
         all_totals = []
