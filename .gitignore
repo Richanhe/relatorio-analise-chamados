@@ -12,3 +12,4 @@ wheels/
 # Documents
 relatorios/*
 !relatorios/.gitkeep
+relatorios-checar/*

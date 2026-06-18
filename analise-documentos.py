@@ -6,20 +6,7 @@ import pytesseract
 from PIL import Image
 from pypdf import PdfReader
 
-# Resolver o caminho do tesseract dinamicamente no Windows
-def resolve_tesseract_path():
-    paths = [
-        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
-        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
-        os.path.expandvars(r"%LOCALAPPDATA%\Programs\Tesseract-OCR\tesseract.exe"),
-        os.path.expandvars(r"%LOCALAPPDATA%\Tesseract-OCR\tesseract.exe"),
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            return p
-    return "tesseract"
-
-pytesseract.pytesseract.tesseract_cmd = resolve_tesseract_path()
+pytesseract.pytesseract.tesseract_cmd = r"C:\Users\richard.kanheski\AppData\Local\Programs\Tesseract-OCR\tesseract.exe"
 
 def is_valid_profile_name(name):
     """
@@ -32,7 +19,7 @@ def is_valid_profile_name(name):
     substring_keywords = [
         'FUNCIONAL', 'DESENVOLVEDOR', 'ABAP', 'GESTAO', 'GESTÃO', 'PMO', 'ARQUITETO', 
         'CONSULTOR', 'BASIS', 'INTEGRACAO', 'INTEGRAÇÃO', 'FOMENTO', 'GRAOS', 'GRÃOS', 
-        'COCUMORENAEUNN'
+        'COCUMORENAEUNN', "FIORI"
     ]
     # Palavras-chave curtas que devem ser palavras completas
     word_keywords = [
@@ -48,7 +35,6 @@ def is_valid_profile_name(name):
         return True
         
     return False
-
 
 def normalize_profile_name(name):
     """
@@ -81,7 +67,12 @@ def normalize_profile_name(name):
     if any(x in name_norm for x in ['DESENVOLVEDOR', 'ABAP', 'SDK', 'WEB']):
         if 'WEB' in name_norm:
             return "Desenvolvedor WEB"
-        return "Desenvolvedor ABAP" if 'ABAP' in name_norm else "Desenvolvedor"
+        if 'FIORI' in name_norm:
+            return "Desenvolvedor FIORI"
+        if 'ABAP' in name_norm:
+            return "Desenvolvedor ABAP"
+
+        return "Desenvolvedor"
         
     if any(x in name_norm for x in ['GESTAO', 'GESTÃO', 'PMO']):
         return "Gestão / PMO"
