@@ -252,12 +252,13 @@ def extrair_dados_ocr(caminho_pdf, page_index):
         text_orig_list = []
         text_gray_list = []
         text_gray_psm11_list = []
+        text_gray_psm6_list = []
         
         # Estrutura para armazenar as listas das passagens binarizadas por threshold (resiliência a ruídos/JPEG)
         bin_passes = {
-            127: {"default": [], "psm11": []},
-            100: {"default": [], "psm11": []},
-            150: {"default": [], "psm11": []}
+            127: {"default": [], "psm11": [], "psm6": []},
+            100: {"default": [], "psm11": [], "psm6": []},
+            150: {"default": [], "psm11": [], "psm6": []}
         }
         
         for img_path, img_name in images_data:
@@ -281,6 +282,10 @@ def extrair_dados_ocr(caminho_pdf, page_index):
                 text_gray_psm11 = pytesseract.image_to_string(img_gray, lang="por+eng", config="--psm 11")
                 text_gray_psm11_list.append(text_gray_psm11)
                 
+                # OCR Grayscale (PSM 6)
+                text_gray_psm6 = pytesseract.image_to_string(img_gray, lang="por+eng", config="--psm 6")
+                text_gray_psm6_list.append(text_gray_psm6)
+                
                 # 3. Binarizações com diferentes limites
                 for thresh in bin_passes.keys():
                     img_bin = img_gray.point(lambda p: 255 if p > thresh else 0)
@@ -293,6 +298,10 @@ def extrair_dados_ocr(caminho_pdf, page_index):
                     text_bin_psm11 = pytesseract.image_to_string(img_bin, lang="por+eng", config="--psm 11")
                     bin_passes[thresh]["psm11"].append(text_bin_psm11)
                     
+                    # Binarized (PSM 6)
+                    text_bin_psm6 = pytesseract.image_to_string(img_bin, lang="por+eng", config="--psm 6")
+                    bin_passes[thresh]["psm6"].append(text_bin_psm6)
+                    
             except Exception as e:
                 print(f"Erro ao processar imagem {img_name}: {e}")
                 
@@ -300,12 +309,14 @@ def extrair_dados_ocr(caminho_pdf, page_index):
         passes = [
             ("original", "\n".join(text_orig_list)),
             ("gray", "\n".join(text_gray_list)),
-            ("gray_psm11", "\n".join(text_gray_psm11_list))
+            ("gray_psm11", "\n".join(text_gray_psm11_list)),
+            ("gray_psm6", "\n".join(text_gray_psm6_list))
         ]
         
         for thresh, t_dicts in bin_passes.items():
             passes.append((f"binarized_{thresh}", "\n".join(t_dicts["default"])))
             passes.append((f"binarized_{thresh}_psm11", "\n".join(t_dicts["psm11"])))
+            passes.append((f"binarized_{thresh}_psm6", "\n".join(t_dicts["psm6"])))
         
         pass_results = []
         all_totals = []
@@ -466,7 +477,7 @@ def extrair_dados_pdf(caminho_pdf):
 
     # 4. Conversão Tickets Baseline (ex: "Conversão de tickets baseline: 5 tickets" ou "Conversão baseline tickets: 5 tks")
     match_conv_tickets = re.search(
-        r'Conversão\s+(?:de\s+)?(?:tickets\s+baseline|baseline\s+tickets)\s*[-–—:]?\s*([\d,\.]+(?:\s*(?:tickets|ticket|tks))?)',
+        r'Conversão\s+(?:de\s+)?(?:th?ickets\s+baseline|baseline\s+th?ickets)\s*[-–—:]?\s*([\d,\.]+(?:\s*(?:th?ickets|th?icket|tks))?)',
         texto_completo,
         re.IGNORECASE
     )
